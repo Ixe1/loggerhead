@@ -1,5 +1,6 @@
 import asyncio
 from asyncio import Queue
+import datetime
 import time
 from collections import defaultdict
 import logging
@@ -42,19 +43,23 @@ def is_busy_server(guild_id):
     else:
         threshold = base_threshold
     
+    logging.debug(f"is_busy_server: Guild ID: {guild_id}, Event Count: {event_count}, Threshold: {threshold}")
     return event_count >= threshold
 
 def is_event_enabled(guild_id, event_name):
+    logging.debug(f"is_event_enabled: Guild ID: {guild_id}, Event Name: {event_name}")
     return event_name in LOG_EVENT_SETTINGS.get(guild_id, set())
 
 async def log_event(guild_id, event_name, embed):
     webhook_url = LOG_WEBHOOKS.get(guild_id)
     if webhook_url:
-        webhook = RateLimitedWebhook(webhook_url)
+        webhook = RateLimitedWebhook(webhook_url, update_request_count_callback=update_request_count)
         if is_busy_server(guild_id):
+            logging.debug(f"log_event: Guild ID: {guild_id}, Event Name: {event_name}, Batching event")
             # Batch the events for busy servers
             if guild_id not in EVENT_BATCHES:
                 EVENT_BATCHES[guild_id] = []
+            embed.timestamp = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc)
             EVENT_BATCHES[guild_id].append(embed)
             
             # Check if the current batch exceeds the maximum size
@@ -69,18 +74,19 @@ async def log_event(guild_id, event_name, embed):
                     
                     chunks = [batch_message[i:i+MAX_BATCH_SIZE] for i in range(0, len(batch_message), MAX_BATCH_SIZE)]
                     for chunk in chunks:
-                        update_request_count()
                         await webhook.send(content=chunk)
                     
                     EVENT_BATCHES[guild_id] = []
         else:
+            logging.debug(f"log_event: Guild ID: {guild_id}, Event Name: {event_name}, Sending individual event")
             # Send individual embeds for light servers
-            update_request_count()
             await webhook.send(embed=embed)
         
         # Update the event counter and timestamp for the server
         EVENT_COUNTERS[guild_id]['count'] += 1
         EVENT_COUNTERS[guild_id]['last_event_time'] = time.time()
+    else:
+        logging.warning(f"log_event: Guild ID: {guild_id}, Event Name: {event_name}, Webhook URL not found")
 
 async def print_request_counts():
     global REQUEST_COUNTS
@@ -100,7 +106,7 @@ async def print_request_counts():
 
 def get_batch_interval(guild_id):
     event_count = EVENT_COUNTERS[guild_id]['count']
-    base_interval = 20  # Base interval in seconds
+    base_interval = 10  # Base interval in seconds
     
     multiplier = 1 + (event_count // 10) * 0.5
     return base_interval * multiplier
@@ -125,13 +131,17 @@ async def ramp_up_logging():
 async def send_pending_batches():
     while True:
         try:
-            current_time = time.time()
+            current_time = datetime.datetime.now(datetime.timezone.utc)
             tasks = []
             for guild_id, batch in EVENT_BATCHES.items():
                 if batch:
-                    batch_interval = get_batch_interval(guild_id)
-                    if current_time - batch[0].timestamp >= batch_interval:
-                        tasks.append(send_batch(guild_id, batch))
+                    if batch[0].timestamp is not None:
+                        batch_interval = get_batch_interval(guild_id)
+                        if (current_time - batch[0].timestamp).total_seconds() >= batch_interval:
+                            tasks.append(send_batch(guild_id, batch))
+                    else:
+                        # Remove the batch if the timestamp is None
+                        EVENT_BATCHES[guild_id] = []
             
             if tasks:
                 await asyncio.gather(*tasks)
@@ -151,11 +161,10 @@ async def send_batch(guild_id, batch):
         
         webhook_url = LOG_WEBHOOKS.get(guild_id)
         if webhook_url:
-            webhook = RateLimitedWebhook(webhook_url)
+            webhook = RateLimitedWebhook(webhook_url, update_request_count_callback=update_request_count)
             chunks = [batch_message[i:i+MAX_BATCH_SIZE] for i in range(0, len(batch_message), MAX_BATCH_SIZE)]
             for chunk in chunks:
-                update_request_count()
-                await webhook.send(chunk)
+                await webhook.send(content=chunk)
         
         EVENT_BATCHES[guild_id] = []
 

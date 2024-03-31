@@ -548,19 +548,21 @@ async def on_voice_state_update(member, before, after):
 
     log_channel = LOG_CHANNELS.get(member.guild.id)
     if log_channel:
-        if before.channel is None:
+        # Check if the member joined or left a voice channel
+        if before.channel is None and after.channel is not None:
             embed = discord.Embed(title=f"{member} joined voice channel {after.channel.mention}", color=discord.Color.green())
             embed.set_thumbnail(url=member.avatar.url)
             embed.add_field(name="User", value=f"{member.mention} ({member.id})")
             embed.add_field(name="Channel", value=f"{after.channel.mention} ({after.channel.id})")
             asyncio.create_task(log_event(member.guild.id, 'voice_state_update', embed))
-        elif after.channel is None:
+        elif before.channel is not None and after.channel is None:
             embed = discord.Embed(title=f"{member} left voice channel {before.channel.mention}", color=discord.Color.red())
             embed.set_thumbnail(url=member.avatar.url)
             embed.add_field(name="User", value=f"{member.mention} ({member.id})")
             embed.add_field(name="Channel", value=f"{before.channel.mention} ({before.channel.id})")
             asyncio.create_task(log_event(member.guild.id, 'voice_state_update', embed))
-        else:
+        # Check if the member moved between voice channels
+        elif before.channel != after.channel:
             embed = discord.Embed(title=f"{member} moved from {before.channel.mention} to {after.channel.mention}", color=discord.Color.blue())
             embed.set_thumbnail(url=member.avatar.url)
             embed.add_field(name="User", value=f"{member.mention} ({member.id})")
@@ -649,8 +651,10 @@ async def setlogconfig(ctx, log_channel: discord.TextChannel = None, *, log_even
                 webhook = hook
                 break
         if webhook is None:
-            avatar_url = bot.user.avatar.url
-            webhook = await log_channel.create_webhook(name="LoggerHead", avatar=await avatar_url.read())
+            async with aiohttp.ClientSession() as session:
+                async with session.get(bot.user.avatar.url) as response:
+                    avatar_bytes = await response.read()
+            webhook = await log_channel.create_webhook(name="LoggerHead", avatar=avatar_bytes)
 
         set_config(ctx.guild.id, log_channel.name, None)  # Update only the channel name
         LOG_CHANNELS[ctx.guild.id] = log_channel
@@ -712,7 +716,10 @@ async def setlogconfig(ctx, log_channel: discord.TextChannel = None, *, log_even
                 break
         if webhook is None:
             avatar_url = bot.user.avatar.url
-            webhook = await log_channel.create_webhook(name="LoggerHead", avatar=await avatar_url.read())
+            async with aiohttp.ClientSession() as session:
+                async with session.get(bot.user.avatar.url) as response:
+                    avatar_bytes = await response.read()
+            webhook = await log_channel.create_webhook(name="LoggerHead", avatar=avatar_bytes)
     
         LOG_EVENT_SETTINGS[ctx.guild.id] = set(log_events_list)
         set_config(ctx.guild.id, log_channel.name, log_events)
