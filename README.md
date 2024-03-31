@@ -20,6 +20,13 @@ A Discord bot that logs various events and activities in your Discord server.
 - Periodic reporting of requests per second to monitor bot activity
 - Supports multiple Discord servers, with the configuration for each server being stored in a PostgreSQL database
 
+## Planned
+
+- Caching of Discord messages to PostgresSQL database
+  - This means if the bot is restarted then it still has a recollection of a certain number of chat messages per guild (Discord server)
+- Refactoring
+  - Yeah, I know, the code is probably not that tidy at the moment
+
 ## Installation
 
 1. Clone the repository:
