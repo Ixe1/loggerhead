@@ -388,6 +388,9 @@ async def on_message_edit(before, after):
     if not is_event_enabled(before.guild.id, 'message_edit'):
         return
 
+    if before.content == after.content:
+        return
+
     log_channel = LOG_CHANNELS.get(before.guild.id)
     if log_channel:
         embed = discord.Embed(title=f"Message edited in {before.channel.mention}", color=discord.Color.blue())
