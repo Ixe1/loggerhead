@@ -142,24 +142,52 @@ async def on_guild_channel_update(before, after):
                     embed.add_field(name="After", value=after.category.name if after.category else "None", inline=False)
                     asyncio.create_task(log_event(before.guild.id, 'guild_channel_update', embed))
                 
-                # Check for permission changes
+                # Check for role permission changes
                 before_roles_with_perms = []
                 for role in before.guild.roles:
-                    role_perms = before.overwrites_for(role).pair()
-                    if role_perms[0] or role_perms[1]:
-                        before_roles_with_perms.append(f"{role.mention}: {', '.join(perm for perm, value in role_perms if value)}")
-                
+                    role_perms = before.overwrites_for(role)
+                    if role_perms:
+                        perm_list = [perm for perm, value in role_perms if value is True]
+                        if perm_list:
+                            before_roles_with_perms.append(f"{role.mention}: {', '.join(perm_list)}")
+
                 after_roles_with_perms = []
                 for role in after.guild.roles:
-                    role_perms = after.overwrites_for(role).pair()
-                    if role_perms[0] or role_perms[1]:
-                        after_roles_with_perms.append(f"{role.mention}: {', '.join(perm for perm, value in role_perms if value)}")
-                
+                    role_perms = after.overwrites_for(role)
+                    if role_perms:
+                        perm_list = [perm for perm, value in role_perms if value is True]
+                        if perm_list:
+                            after_roles_with_perms.append(f"{role.mention}: {', '.join(perm_list)}")
+
                 if before_roles_with_perms != after_roles_with_perms:
-                    embed = discord.Embed(title="Channel permissions updated", color=discord.Color.blue())
+                    embed = discord.Embed(title="Channel role permissions updated", color=discord.Color.blue())
                     embed.add_field(name="Channel", value=after.mention)
                     embed.add_field(name="Before", value="\n".join(before_roles_with_perms) or "None", inline=False)
                     embed.add_field(name="After", value="\n".join(after_roles_with_perms) or "None", inline=False)
+                    asyncio.create_task(log_event(before.guild.id, 'guild_channel_update', embed))
+                
+                # Check for member permission changes
+                before_members_with_perms = []
+                for member in before.members:
+                    member_perms = before.overwrites_for(member)
+                    if member_perms:
+                        perm_list = [perm for perm, value in member_perms if value is True]
+                        if perm_list:
+                            before_members_with_perms.append(f"{member.mention}: {', '.join(perm_list)}")
+
+                after_members_with_perms = []
+                for member in after.members:
+                    member_perms = after.overwrites_for(member)
+                    if member_perms:
+                        perm_list = [perm for perm, value in member_perms if value is True]
+                        if perm_list:
+                            after_members_with_perms.append(f"{member.mention}: {', '.join(perm_list)}")
+
+                if before_members_with_perms != after_members_with_perms:
+                    embed = discord.Embed(title="Channel member permissions updated", color=discord.Color.blue())
+                    embed.add_field(name="Channel", value=after.mention)
+                    embed.add_field(name="Before", value="\n".join(before_members_with_perms) or "None", inline=False)
+                    embed.add_field(name="After", value="\n".join(after_members_with_perms) or "None", inline=False)
                     asyncio.create_task(log_event(before.guild.id, 'guild_channel_update', embed))
                 
                 break
